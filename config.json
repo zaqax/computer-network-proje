@@ -1,0 +1,50 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "max_players": 2,
+    "timeout": 5
+  },
+  "game": {
+    "board_size": 100,
+    "dice_min": 1,
+    "dice_max": 6,
+    "ladders": {
+      "1": 38,
+      "4": 14,
+      "9": 31,
+      "21": 42,
+      "28": 84,
+      "51": 67,
+      "72": 91,
+      "80": 99
+    },
+    "snakes": {
+      "17": 7,
+      "54": 34,
+      "62": 18,
+      "88": 24,
+      "95": 75,
+      "97": 79
+    }
+  },
+  "client": {
+    "default_host": "127.0.0.1",
+    "default_port": 5000,
+    "board_cell_size": 60,
+    "window_width": 800,
+    "window_height": 700
+  },
+  "ui": {
+    "player1_color": "#FF0000",
+    "player2_color": "#0000FF",
+    "cell_light_color": "#F0F0F0",
+    "cell_dark_color": "#FFFFFF",
+    "font_family": "Arial",
+    "font_size": 12
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(levelname)s - %(message)s"
+  }
+}
