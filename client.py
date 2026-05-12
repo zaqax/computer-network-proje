@@ -65,6 +65,7 @@ class GameBoardWidget(QWidget):
         54: 34,
         62: 32,
         66: 50,
+        78: 57,
         88: 58,
         95: 75,
         97: 79
