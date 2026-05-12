@@ -42,11 +42,32 @@ class GameBoardWidget(QWidget):
     BOARD_SIZE = 10
     CELL_SIZE = 60
     LADDERS = {
-        4: 38, 6: 14, 9: 31, 21: 42, 28: 84, 51: 67, 72: 91, 80: 99
+        4: 38,
+        6: 14,
+        9: 31,
+        13: 36,
+        18: 44,
+        21: 42,
+        28: 58,
+        33: 53,
+        45: 70,
+        51: 67,
+        72: 91,
+        80: 96,
+        94: 98
     }
     
     SNAKES = {
-        17: 7, 54: 34, 62: 18, 88: 24, 95: 75, 97: 79
+        17: 7,
+        27: 11,
+        39: 19,
+        48: 30,
+        54: 34,
+        62: 32,
+        66: 50,
+        88: 58,
+        95: 75,
+        97: 79
     }
 
     PLAYER_COLORS = [
@@ -179,24 +200,37 @@ class GameBoardWidget(QWidget):
         x = x0 + col * cs
         y = y0 + row * cs
 
-        painter.setPen(QPen(color, 2))
+        painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(color))
-        rect_h = max(14, cs // 5)
-        painter.drawRoundedRect(x + 4, y + rect_h//2, cs - 8, rect_h, 4, 4)
-        painter.setPen(QPen(Qt.white))
-        painter.drawText(x + 8, y + rect_h//2 + rect_h - 4, text)
+        rect_h = max(24, cs // 4)
+        rect_w = max(32, min(cs - 8, 80))
+        rect_x = x + 4
+        rect_y = y + max(18, cs // 5)
+        painter.drawRoundedRect(rect_x, rect_y, rect_w, rect_h, 4, 4)
 
-        arrow_x = x + cs - max(12, cs//6)
-        arrow_y = y + max(6, cs//10)
-        painter.setPen(QPen(color, max(2, cs//30)))
+        painter.setPen(QPen(Qt.white))
+        painter.setFont(QFont("Arial", max(7, rect_h // 3), QFont.Bold))
+        marker_type = "L" if start in self.LADDERS else "S"
+        top_text = f"{marker_type} {start}"
+        bottom_text = str(end)
+        painter.drawText(rect_x, rect_y, rect_w, rect_h // 2, Qt.AlignCenter, top_text)
+        painter.drawText(rect_x, rect_y + rect_h // 2, rect_w, rect_h // 2, Qt.AlignCenter, bottom_text)
+
+        arrow_x = rect_x + rect_w - max(10, cs // 8)
+        arrow_y = rect_y + rect_h // 2
+        arrow_size = max(4, cs // 20)
+        painter.setPen(QPen(color, max(2, cs // 30)))
+        painter.setBrush(Qt.NoBrush)
         if start in self.LADDERS:
-            painter.drawLine(arrow_x, arrow_y + rect_h, arrow_x, arrow_y)
-            painter.drawLine(arrow_x, arrow_y, arrow_x - max(4, cs//30), arrow_y + max(5, cs//20))
-            painter.drawLine(arrow_x, arrow_y, arrow_x + max(4, cs//30), arrow_y + max(5, cs//20))
+            top_y = arrow_y - arrow_size
+            painter.drawLine(arrow_x, arrow_y + arrow_size, arrow_x, top_y)
+            painter.drawLine(arrow_x, top_y, arrow_x - arrow_size, top_y + arrow_size)
+            painter.drawLine(arrow_x, top_y, arrow_x + arrow_size, top_y + arrow_size)
         else:
-            painter.drawLine(arrow_x, arrow_y, arrow_x, arrow_y + rect_h)
-            painter.drawLine(arrow_x, arrow_y + rect_h, arrow_x - max(4, cs//30), arrow_y + rect_h - max(5, cs//20))
-            painter.drawLine(arrow_x, arrow_y + rect_h, arrow_x + max(4, cs//30), arrow_y + rect_h - max(5, cs//20))
+            bottom_y = arrow_y + arrow_size
+            painter.drawLine(arrow_x, arrow_y - arrow_size, arrow_x, bottom_y)
+            painter.drawLine(arrow_x, bottom_y, arrow_x - arrow_size, bottom_y - arrow_size)
+            painter.drawLine(arrow_x, bottom_y, arrow_x + arrow_size, bottom_y - arrow_size)
     
     def get_position_from_coords(self, col: int, row: int) -> int:
         """Koordinatlardan pozisyonu al"""
