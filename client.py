@@ -419,6 +419,7 @@ class GameWindow(QMainWindow):
         self.game_phase = GamePhase.CONNECTING
         self.player_id = None
         self.total_players = 0
+        self.last_winner_id = None
         self.signals = CommunicationSignals()
         self.client = GameClient(self.signals)
         
@@ -512,6 +513,8 @@ class GameWindow(QMainWindow):
         self.winner_label = QLabel("")
         self.winner_label.setStyleSheet("color: white")
         self.winner_label.setFont(QFont("Arial", 24, QFont.Bold))
+        self.winner_label.setAlignment(Qt.AlignCenter)
+        self.winner_label.setWordWrap(False)
         overlay_layout.addWidget(self.winner_label)
         self.winner_continue_btn = QPushButton("Devam")
         self.winner_continue_btn.setFixedWidth(200)
@@ -600,6 +603,17 @@ class GameWindow(QMainWindow):
             )
         self.player_legend_label.setText("   ".join(parts))
 
+    def update_player_label_color(self, player_id: Optional[int]):
+        """Oyuncu etiketinin rengini oyuncu rengine ayarla"""
+        if not player_id:
+            self.player_label.setStyleSheet("")
+            return
+
+        color = self.game_board.get_player_color(player_id)
+        self.player_label.setStyleSheet(
+            f"color: rgb({color.red()}, {color.green()}, {color.blue()});"
+        )
+
     def resizeEvent(self, event):
         """Ensure overlay covers the central widget on resize"""
         super().resizeEvent(event)
@@ -655,6 +669,7 @@ class GameWindow(QMainWindow):
             self.total_players = total_players
             self.status_label.setText(f"Oyuncu {self.player_id} olarak bağlandınız")
             self.player_label.setText(f"Oyuncu: {self.player_id}")
+            self.update_player_label_color(self.player_id)
             self.players_count_label.setText(f"Oyuncu sayısı: {total_players}")
             self.update_player_legend(total_players)
             if self.player_id == 1:
@@ -688,10 +703,6 @@ class GameWindow(QMainWindow):
             
             msg_text = f"Oyuncu {player_id} zar attı: {dice_value}\n{move_result.get('message', '')}"
             self.message_label.setText(msg_text)
-            
-            if message.get("game_finished"):
-                winner = message.get("winner")
-                self.game_finished(winner)
         
         elif msg_type == "game_finished":
             winner = message.get("winner")
@@ -771,28 +782,45 @@ class GameWindow(QMainWindow):
     
     def game_finished(self, winner: int):
         """Oyun bitti"""
+        if self.game_phase == GamePhase.FINISHED and self.last_winner_id == winner and self.winner_overlay.isVisible():
+            return
         self.game_phase = GamePhase.FINISHED
         self.roll_dice_btn.setEnabled(False)
-        self.reset_btn.setEnabled(True)
+        self.reset_btn.setEnabled(False)
+        self.winner_continue_btn.setEnabled(True)
+        self.last_winner_id = winner
+
+        winner_color = None
+        if winner is not None:
+            winner_color = self.game_board.get_player_color(winner)
+
+        if winner_color is not None:
+            self.winner_label.setStyleSheet(
+                f"color: rgb({winner_color.red()}, {winner_color.green()}, {winner_color.blue()});"
+            )
+        else:
+            self.winner_label.setStyleSheet("color: white")
+
         # Show full-window winner overlay
         if winner == self.player_id:
             self.status_label.setText("🎉 Tebrikler! Kazandınız!")
             self.winner_label.setText("Tebrikler! Kazandınız 🎉")
         else:
             self.status_label.setText(f"Oyun bitti. Oyuncu {winner} kazandı.")
-            self.winner_label.setText(f"Oyuncu {winner} Kazandı 🎉")
+            self.winner_label.setText(f"Kaybettiniz.\nOyuncu {winner} Kazandı 🎉")
 
-        self.message_label.setText("Oyunu yeniden oynamak için 'Oyunu Sıfırla' butonuna tıklayın")
+        self.message_label.setText("Devam'a basın. Tüm oyuncular basınca oyun sıfırlanır.")
         self.winner_overlay.setGeometry(self.central_widget.rect())
         self.winner_overlay.show()
 
     def on_winner_continue(self):
         """Kullanıcı 'Devam' butonuna bastığında overlay'i kapat; oyun sıfırlanmadan zar atılmasın"""
         self.winner_overlay.hide()
-        # Eğer sunucuya bağlıysak otomatik oyun sıfırlama isteği gönder
+        self.winner_continue_btn.setEnabled(False)
+        # Tüm oyuncular 'Devam' basınca sunucudan sıfırlama iste
         try:
             if hasattr(self, 'client') and self.client and getattr(self.client, 'connected', False):
-                self.client.send_message({"type": "reset_game"})
+                self.client.send_message({"type": "continue_after_finish"})
         except Exception:
             pass
     
