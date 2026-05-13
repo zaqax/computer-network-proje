@@ -113,6 +113,7 @@ class GameBoardWidget(QWidget):
             return (0, 9)
         
         position -= 1
+        # Satırlar bir ileri bir geri (yılan gibi) numaralandırılır.
         row = 9 - (position // 10)
         col = position % 10 if (position // 10) % 2 == 0 else 9 - (position % 10)
         return (col, row)
@@ -152,6 +153,7 @@ class GameBoardWidget(QWidget):
         
         radius = max(8, cs // 5)
         x0, y0 = getattr(self, '_board_origin', (0, 0))
+        # Aynı hücrede birden fazla oyuncu varsa daireleri kaydır.
         offsets = [
             (cs // 6, cs // 6),
             (cs // 2, cs // 6),
@@ -316,6 +318,7 @@ class GameClient:
             self.recv_thread = threading.Thread(target=self.receive_messages, daemon=True)
             self.recv_thread.start()
 
+            # Basit ping ile bağlantı kopmasın.
             if self.heartbeat_timer is None:
                 self.heartbeat_timer = QTimer()
                 self.heartbeat_timer.setInterval(10000)
@@ -351,6 +354,7 @@ class GameClient:
                 if not self.receive_buffer:
                     break
                 
+                # Mesajlar satır sonu ile ayrılıyor.
                 while b"\n" in self.receive_buffer:
                     raw_message, self.receive_buffer = self.receive_buffer.split(b"\n", 1)
                     raw_message = raw_message.strip()
@@ -504,7 +508,7 @@ class GameWindow(QMainWindow):
         layout.setStretch(2, 0)  # buttons
         layout.setStretch(3, 0)  # footer row
 
-        # Kazanan overlay (başlangıçta gizli)
+        # Kazanan/kaybeden ekranı (başlangıçta gizli)
         self.winner_overlay = QWidget(self.central_widget)
         self.winner_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 180);")
         self.winner_overlay.hide()
@@ -609,6 +613,7 @@ class GameWindow(QMainWindow):
             self.player_label.setStyleSheet("")
             return
 
+        # Sağ üstteki oyuncu etiketi rengi.
         color = self.game_board.get_player_color(player_id)
         self.player_label.setStyleSheet(
             f"color: rgb({color.red()}, {color.green()}, {color.blue()});"
@@ -794,6 +799,7 @@ class GameWindow(QMainWindow):
         if winner is not None:
             winner_color = self.game_board.get_player_color(winner)
 
+        # Kazanan yazı rengi.
         if winner_color is not None:
             self.winner_label.setStyleSheet(
                 f"color: rgb({winner_color.red()}, {winner_color.green()}, {winner_color.blue()});"

@@ -197,6 +197,7 @@ class GameServer:
         self.client_buffers = {}
         self.game = SnakesAndLaddersGame(max_players=max_players)
         self.lock = threading.Lock()
+        # Oyun bittiğinde herkes devama basana kadar bekle.
         self.reset_waiting_players = set()
         self.reset_expected = 0
 
@@ -336,6 +337,7 @@ class GameServer:
                         else:
                             self.send_message(client_socket, response)
 
+                        # Kazananı tüm clientlara duyur.
                         if response.get("game_finished"):
                             winner = response.get("winner")
                             self.broadcast({
@@ -408,6 +410,7 @@ class GameServer:
                 if move_result.get("is_winner"):
                     response["game_finished"] = True
                     response["winner"] = player_id
+                    # Yeni turun başlaması için herkesin devama basması gerek.
                     self.reset_waiting_players = set()
                     self.reset_expected = len(self.clients)
                 else:
@@ -438,6 +441,7 @@ class GameServer:
                 if self.reset_expected <= 0:
                     self.reset_expected = len(self.clients)
 
+                # Bu oyuncu devama bastı.
                 self.reset_waiting_players.add(player_id)
 
                 if self.reset_expected > 0 and len(self.reset_waiting_players) >= self.reset_expected:
@@ -521,6 +525,7 @@ class GameServer:
                     del self.client_buffers[client_socket]
                 next_player = self.game.remove_player(player_id)
                 if self.game.game_state == GameState.FINISHED:
+                    # Oyuncu ayrıldıysa devam etmek isteyenler listesinden çıkarıyoruz.
                     self.reset_waiting_players.discard(player_id)
                     self.reset_expected = len(self.clients)
             
