@@ -197,6 +197,8 @@ class GameServer:
         self.client_buffers = {}
         self.game = SnakesAndLaddersGame(max_players=max_players)
         self.lock = threading.Lock()
+        self.reset_waiting_players = set()
+        self.reset_expected = 0
 
     def get_next_player_id(self) -> int:
         """Boşta olan en küçük oyuncu ID'sini bul"""
@@ -329,7 +331,19 @@ class GameServer:
                     response = self.process_message(message, player_id)
                     
                     if response:
-                        self.send_message(client_socket, response)
+                        if response.get("type") == "game_reset":
+                            self.broadcast(response)
+                        else:
+                            self.send_message(client_socket, response)
+
+                        if response.get("game_finished"):
+                            winner = response.get("winner")
+                            self.broadcast({
+                                "type": "game_finished",
+                                "winner": winner,
+                                "message": f"Oyuncu {winner} kazandı.",
+                                "board_state": self.game.get_board_state()
+                            })
                         
                         # Oyunun durumunu tüm oyunculara gönder
                         if response.get("type") in ["dice_rolled", "game_reset"]:
@@ -394,6 +408,8 @@ class GameServer:
                 if move_result.get("is_winner"):
                     response["game_finished"] = True
                     response["winner"] = player_id
+                    self.reset_waiting_players = set()
+                    self.reset_expected = len(self.clients)
                 else:
                     self.game.switch_player()
                 
@@ -407,11 +423,34 @@ class GameServer:
             
             elif msg_type == "reset_game":
                 self.game.reset_game()
+                self.reset_waiting_players = set()
+                self.reset_expected = 0
                 return {
                     "type": "game_reset",
                     "message": "Oyun sıfırlandı",
                     "board_state": self.game.get_board_state()
                 }
+
+            elif msg_type == "continue_after_finish":
+                if self.game.game_state != GameState.FINISHED:
+                    return {"type": "error", "message": "Oyun bitmedi"}
+
+                if self.reset_expected <= 0:
+                    self.reset_expected = len(self.clients)
+
+                self.reset_waiting_players.add(player_id)
+
+                if self.reset_expected > 0 and len(self.reset_waiting_players) >= self.reset_expected:
+                    self.game.reset_game()
+                    self.reset_waiting_players = set()
+                    self.reset_expected = 0
+                    return {
+                        "type": "game_reset",
+                        "message": "Oyun sıfırlandı",
+                        "board_state": self.game.get_board_state()
+                    }
+
+                return None
             
             else:
                 return {"type": "error", "message": "Bilinmeyen mesaj türü"}
@@ -481,6 +520,9 @@ class GameServer:
                 if client_socket in self.client_buffers:
                     del self.client_buffers[client_socket]
                 next_player = self.game.remove_player(player_id)
+                if self.game.game_state == GameState.FINISHED:
+                    self.reset_waiting_players.discard(player_id)
+                    self.reset_expected = len(self.clients)
             
             client_socket.close()
             logger.info(f"Oyuncu {player_id} bağlantısı kesildi")
@@ -493,6 +535,8 @@ class GameServer:
                     remaining = next(iter(self.game.player_positions.keys()))
                     self.game.winner = remaining
                     self.game.game_state = GameState.FINISHED
+                    self.reset_waiting_players = set()
+                    self.reset_expected = len(self.clients)
                     logger.info(f"Oyuncu {remaining} rakiplerin ayrılması nedeniyle kazandı.")
                     # Broadcast game_finished explicitly
                     self.broadcast({
@@ -501,6 +545,25 @@ class GameServer:
                         "message": f"Oyuncu {remaining} kazandı (diğerleri ayrıldı).",
                         "board_state": self.game.get_board_state()
                     })
+                elif self.game.game_state == GameState.FINISHED:
+                    if self.reset_expected > 0 and len(self.reset_waiting_players) >= self.reset_expected:
+                        self.game.reset_game()
+                        self.reset_waiting_players = set()
+                        self.reset_expected = 0
+                        self.broadcast({
+                            "type": "game_reset",
+                            "message": "Oyun sıfırlandı",
+                            "board_state": self.game.get_board_state()
+                        })
+                        self.broadcast({
+                            "type": "board_updated",
+                            "board_state": self.game.get_board_state()
+                        })
+                    else:
+                        self.broadcast({
+                            "type": "board_updated",
+                            "board_state": self.game.get_board_state()
+                        })
                 else:
                     self.broadcast({
                         "type": "board_updated",
