@@ -308,6 +308,7 @@ class GameClient:
     def connect_to_server(self, host: str, port: int) -> bool:
         """Sunucuya bağlan"""
         try:
+            # TCP socket açıyoruz; tek baglantı üzerinden tüm mesajlar gider.
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.settimeout(15)  # 15 saniye timeout
@@ -340,6 +341,7 @@ class GameClient:
         try:
             while self.connected:
                 try:
+                    # TCP stream oldugu icin satır sonuna kadar buffer topluyoruz.
                     while b"\n" not in self.receive_buffer:
                         chunk = self.socket.recv(4096)
                         if not chunk:
@@ -380,6 +382,7 @@ class GameClient:
                 self.signals.disconnected.emit("Sunucuya bağlı değilsiniz")
                 return False
             
+            # JSON + \n ile paket sınırı belirliyoruz.
             json_message = json.dumps(message, ensure_ascii=False)
             data = (json_message + "\n").encode("utf-8")
             self.socket.sendall(data)

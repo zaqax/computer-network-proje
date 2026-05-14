@@ -241,6 +241,7 @@ class GameServer:
         """İstemci bağlantılarını kabul et"""
         while True:
             try:
+                # accept() yeni bir TCP bağlantısı bekler.
                 client_socket, client_address = self.server_socket.accept()
                 client_socket.settimeout(10)  # Client socket timeout
                 
@@ -322,6 +323,7 @@ class GameServer:
         
         try:
             while True:
+                # Her istemci için ayrı döngü: mesaj al, işle, cevapla.
                 message = self.receive_message(client_socket)
                 
                 if message is None:
@@ -466,6 +468,7 @@ class GameServer:
     def send_message(self, client_socket: socket.socket, message: Dict):
         """İstemciye JSON mesaj gönder"""
         try:
+            # TCP stream üzerinde \n ile mesaj sınırı koyuyoruz.
             json_message = json.dumps(message, ensure_ascii=False)
             data = (json_message + "\n").encode("utf-8")
             client_socket.sendall(data)
@@ -483,6 +486,7 @@ class GameServer:
             buffer = self.client_buffers.get(client_socket, b"")
             while b"\n" not in buffer:
                 try:
+                    # Parça parça gelen veriyi buffer'da biriktiriyoruz.
                     chunk = client_socket.recv(4096)
                     if not chunk:
                         logger.warning("İstemci bağlantısı kesildi (empty chunk)")
@@ -507,6 +511,7 @@ class GameServer:
     
     def broadcast(self, message: Dict):
         """Tüm istemcilere mesaj gönder"""
+        # Sunucudan tüm clientlara aynı mesajı yolluyoruz.
         for client_socket in list(self.clients.keys()):
             try:
                 self.send_message(client_socket, message)
