@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Snakes and Ladders Game - Client Application (GUI)
-PyQt5 ile oluşturulan istemci uygulaması
-"""
-
 import sys
 import socket
 import json
@@ -17,19 +10,19 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QGridLayout, QMessageBox, QDialog,
     QSizePolicy
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QObject, QSize, QTimer
-from PyQt5.QtGui import QColor, QFont, QPainter, QBrush, QPen
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QSize, QTimer, QPointF
+from PyQt5.QtGui import QColor, QFont, QPainter, QBrush, QPen, QPainterPath
 
 
 class GamePhase(Enum):
-    """Oyun aşamaları"""
+    # Oyun aşamaları
     CONNECTING = "connecting"
     IN_GAME = "in_game"
     FINISHED = "finished"
 
 
 class CommunicationSignals(QObject):
-    """Socket iletişimi için sinyaller"""
+    # Socket iletişimi için sinyaller
     message_received = pyqtSignal(dict)
     connection_failed = pyqtSignal(str)
     connection_established = pyqtSignal()
@@ -37,7 +30,7 @@ class CommunicationSignals(QObject):
 
 
 class GameBoardWidget(QWidget):
-    """Oyun tahtası görüntüsü"""
+    # Oyun tahtası görüntüsü
     
     BOARD_SIZE = 10
     CELL_SIZE = 60
@@ -81,7 +74,7 @@ class GameBoardWidget(QWidget):
 
     
     def __init__(self):
-        """Tahtayı başlat"""
+        # Tahtayı başlat
         super().__init__()
         self.player_positions = {}
         self.current_player = 1
@@ -89,14 +82,14 @@ class GameBoardWidget(QWidget):
         self.setMinimumSize(200, 200)
 
     def cell_size(self) -> int:
-        """Hücre boyutunu widget boyutuna göre hesapla"""
+        # Hücre boyutunu widget boyutuna göre hesapla
         rect = self.contentsRect()
         w = max(1, rect.width())
         h = max(1, rect.height())
         return int(min(w, h) / self.BOARD_SIZE)
     
     def update_positions(self, player_positions: Dict[int, int], current: int):
-        """Oyuncu pozisyonlarını güncelle"""
+        # Oyuncu pozisyonlarını güncelle
         normalized_positions = {}
         for player_id, position in player_positions.items():
             try:
@@ -108,7 +101,7 @@ class GameBoardWidget(QWidget):
         self.update()
     
     def pos_to_coords(self, position: int) -> Tuple[int, int]:
-        """Pozisyonu koordinatlara dönüştür"""
+        # Pozisyonu koordinatlara dönüştür
         if position == 0:
             return (0, 9)
         
@@ -119,7 +112,7 @@ class GameBoardWidget(QWidget):
         return (col, row)
     
     def paintEvent(self, event):
-        """Tahtayı çiz"""
+        # Tahtayı çiz
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
         cs = self.cell_size()
@@ -181,62 +174,113 @@ class GameBoardWidget(QWidget):
         painter.end()
 
     def get_player_color(self, player_id: int) -> QColor:
-        """Oyuncu için sabit renk döndür"""
+        # Oyuncu için sabit renk döndür
         return self.PLAYER_COLORS[(player_id - 1) % len(self.PLAYER_COLORS)]
 
     def draw_special_cells(self, painter: QPainter):
-        """Yılan ve merdiven olan hücreleri küçük işaretlerle göster"""
-        font = QFont("Arial", 8, QFont.Bold)
-        painter.setFont(font)
+        # Yılan ve merdiven simgelerini çiz
+        ladder_color = QColor(46, 204, 113)
+        snake_color = QColor(231, 76, 60)
+        cs = self.cell_size()
+        painter.setFont(QFont("Arial", max(7, cs // 8), QFont.Bold))
 
         for start, end in self.LADDERS.items():
-            self.draw_cell_marker(painter, start, end, QColor(46, 204, 113), f"L {start}->{end}")
+            self.draw_ladder_icon(painter, start, "top-left", ladder_color)
+            self.draw_ladder_icon(painter, end, "bottom-left", ladder_color)
+            self.draw_cell_label(painter, start, f"{start}->{end}", ladder_color)
 
         for start, end in self.SNAKES.items():
-            self.draw_cell_marker(painter, start, end, QColor(231, 76, 60), f"S {start}->{end}")
+            self.draw_snake_icon(painter, start, "top-left", snake_color)
+            self.draw_cell_label(painter, start, f"{start}->{end}", snake_color)
 
-    def draw_cell_marker(self, painter: QPainter, start: int, end: int, color: QColor, text: str):
-        """Tek hücre için küçük renkli işaret çiz"""
+    def cell_top_left(self, position: int) -> Tuple[float, float]:
+        # Hücrenin sol üst koordinatı
         cs = self.cell_size()
-        col, row = self.pos_to_coords(start)
+        col, row = self.pos_to_coords(position)
         x0, y0 = getattr(self, '_board_origin', (0, 0))
-        x = x0 + col * cs
-        y = y0 + row * cs
+        return (x0 + col * cs, y0 + row * cs)
 
+    def icon_position(self, position: int, corner: str, size: float) -> Tuple[float, float]:
+        # İkon için köşeye göre konum döndür
+        cs = self.cell_size()
+        x, y = self.cell_top_left(position)
+        pad = max(3, cs // 10)
+        if corner == "bottom-left":
+            return (x + pad, y + cs - pad - size)
+        return (x + pad, y + pad)
+
+    def draw_cell_label(self, painter: QPainter, position: int, text: str, color: QColor):
+        # Hücrede kısa bilgi etiketi göster
+        cs = self.cell_size()
+        x, y = self.cell_top_left(position)
+        pad = max(2, cs // 12)
+        fm = painter.fontMetrics()
+        text_w = fm.horizontalAdvance(text)
+        text_h = fm.height()
+        label_w = min(cs - 2 * pad, text_w + pad * 2)
+        label_h = min(cs // 2, text_h + pad)
+        label_x = x + cs - label_w - pad
+        label_y = y + pad
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(color))
-        rect_h = max(24, cs // 4)
-        rect_w = max(32, min(cs - 8, 80))
-        rect_x = x + 4
-        rect_y = y + max(18, cs // 5)
-        painter.drawRoundedRect(rect_x, rect_y, rect_w, rect_h, 4, 4)
-
+        painter.drawRoundedRect(label_x, label_y, label_w, label_h, 4, 4)
         painter.setPen(QPen(Qt.white))
-        painter.setFont(QFont("Arial", max(7, rect_h // 3), QFont.Bold))
-        marker_type = "L" if start in self.LADDERS else "S"
-        top_text = f"{marker_type} {start}"
-        bottom_text = str(end)
-        painter.drawText(rect_x, rect_y, rect_w, rect_h // 2, Qt.AlignCenter, top_text)
-        painter.drawText(rect_x, rect_y + rect_h // 2, rect_w, rect_h // 2, Qt.AlignCenter, bottom_text)
+        painter.drawText(label_x, label_y, label_w, label_h, Qt.AlignCenter, text)
 
-        arrow_x = rect_x + rect_w - max(10, cs // 8)
-        arrow_y = rect_y + rect_h // 2
-        arrow_size = max(4, cs // 20)
-        painter.setPen(QPen(color, max(2, cs // 30)))
+    def draw_ladder_icon(self, painter: QPainter, position: int, corner: str, color: QColor):
+        # Merdiven simgesi çiz
+        cs = self.cell_size()
+        size = max(10, int(cs * 0.28))
+        x, y = self.icon_position(position, corner, size)
+
+        left_x = x + size * 0.2
+        right_x = x + size * 0.8
+        top_y = y
+        bottom_y = y + size
+
+        rail_pen = QPen(color, max(2, size // 5), Qt.SolidLine, Qt.RoundCap)
+        rung_pen = QPen(color.darker(125), max(1, size // 6), Qt.SolidLine, Qt.RoundCap)
+
+        painter.setPen(rail_pen)
+        painter.drawLine(QPointF(left_x, top_y), QPointF(left_x, bottom_y))
+        painter.drawLine(QPointF(right_x, top_y), QPointF(right_x, bottom_y))
+
+        painter.setPen(rung_pen)
+        for t in (0.25, 0.5, 0.75):
+            yy = y + size * t
+            painter.drawLine(QPointF(left_x, yy), QPointF(right_x, yy))
+
+    def draw_snake_icon(self, painter: QPainter, position: int, corner: str, color: QColor):
+        # Yılan simgesi çiz
+        cs = self.cell_size()
+        size = max(10, int(cs * 0.28))
+        x, y = self.icon_position(position, corner, size)
+
+        path = QPainterPath()
+        path.moveTo(x + size * 0.1, y + size * 0.2)
+        path.cubicTo(
+            x + size * 0.9, y + size * 0.05,
+            x + size * 0.2, y + size * 0.5,
+            x + size * 0.85, y + size * 0.65
+        )
+        path.cubicTo(
+            x + size * 0.95, y + size * 0.75,
+            x + size * 0.5, y + size * 0.95,
+            x + size * 0.2, y + size * 0.85
+        )
+
+        snake_pen = QPen(color, max(2, size // 5), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(snake_pen)
         painter.setBrush(Qt.NoBrush)
-        if start in self.LADDERS:
-            top_y = arrow_y - arrow_size
-            painter.drawLine(arrow_x, arrow_y + arrow_size, arrow_x, top_y)
-            painter.drawLine(arrow_x, top_y, arrow_x - arrow_size, top_y + arrow_size)
-            painter.drawLine(arrow_x, top_y, arrow_x + arrow_size, top_y + arrow_size)
-        else:
-            bottom_y = arrow_y + arrow_size
-            painter.drawLine(arrow_x, arrow_y - arrow_size, arrow_x, bottom_y)
-            painter.drawLine(arrow_x, bottom_y, arrow_x - arrow_size, bottom_y - arrow_size)
-            painter.drawLine(arrow_x, bottom_y, arrow_x + arrow_size, bottom_y - arrow_size)
+        painter.drawPath(path)
+
+        head_r = max(2, size // 6)
+        painter.setPen(QPen(color.darker(115), 1))
+        painter.setBrush(QBrush(color))
+        painter.drawEllipse(QPointF(x + size * 0.2, y + size * 0.85), head_r, head_r)
     
     def get_position_from_coords(self, col: int, row: int) -> int:
-        """Koordinatlardan pozisyonu al"""
+        # Koordinatlardan pozisyonu al
         actual_row = 9 - row
         if actual_row % 2 == 0:
             position = actual_row * 10 + col + 1
@@ -246,17 +290,17 @@ class GameBoardWidget(QWidget):
 
 
 class ConnectionDialog(QDialog):
-    """Sunucu bağlantısı için diyalog"""
+    # Sunucu bağlantısı için diyalog
     
     def __init__(self, parent=None):
-        """Diyalogu başlat"""
+        # Diyalogu başlat
         super().__init__(parent)
         self.server_ip = None
         self.server_port = None
         self.init_ui()
     
     def init_ui(self):
-        """UI'yi oluştur"""
+        # UI'yi oluştur
         self.setWindowTitle("Sunucuya Bağlan")
         self.setModal(True)
         layout = QVBoxLayout()
@@ -287,17 +331,17 @@ class ConnectionDialog(QDialog):
         self.setLayout(layout)
     
     def get_connection_details(self) -> Tuple[str, int]:
-        """Bağlantı detaylarını al"""
+        # Bağlantı detaylarını al
         ip = self.ip_input.text().strip()
         port = int(self.port_input.text().strip())
         return ip, port
 
 
 class GameClient:
-    """Oyun istemcisi - Socket yönetimi"""
+    # Oyun istemcisi - Socket yönetimi
     
     def __init__(self, signals: CommunicationSignals):
-        """İstemciyi başlat"""
+        # İstemciyi başlat
         self.socket = None
         self.signals = signals
         self.connected = False
@@ -306,7 +350,7 @@ class GameClient:
         self.heartbeat_timer = None
     
     def connect_to_server(self, host: str, port: int) -> bool:
-        """Sunucuya bağlan"""
+        # Sunucuya bağlan
         try:
             # TCP socket açıyoruz; tek baglantı üzerinden tüm mesajlar gider.
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -337,7 +381,7 @@ class GameClient:
             return False
     
     def receive_messages(self):
-        """Sunucudan mesaj al"""
+        # Sunucudan mesaj al
         try:
             while self.connected:
                 try:
@@ -376,7 +420,7 @@ class GameClient:
             self.connected = False
     
     def send_message(self, message: Dict) -> bool:
-        """Sunucuya mesaj gönder"""
+        # Sunucuya mesaj gönder
         try:
             if not self.connected or not self.socket:
                 self.signals.disconnected.emit("Sunucuya bağlı değilsiniz")
@@ -398,12 +442,12 @@ class GameClient:
             return False
 
     def send_heartbeat(self):
-        """Bağlantıyı canlı tutmak için sessiz ping gönder"""
+        # Bağlantıyı canlı tutmak için sessiz ping gönder
         if self.connected:
             self.send_message({"type": "ping"})
     
     def disconnect(self):
-        """Sunucudan ayrıl"""
+        # Sunucudan ayrıl
         self.connected = False
         if self.heartbeat_timer is not None:
             self.heartbeat_timer.stop()
@@ -415,10 +459,10 @@ class GameClient:
 
 
 class GameWindow(QMainWindow):
-    """Ana oyun penceresi"""
+    # Ana oyun penceresi
     
     def __init__(self):
-        """Pencereyi başlat"""
+        # Pencereyi başlat
         super().__init__()
         self.setWindowTitle("Yılanlar ve Merdivenler")
         self.setGeometry(100, 100, 800, 700)
@@ -441,7 +485,7 @@ class GameWindow(QMainWindow):
         self.show()
     
     def init_ui(self):
-        """UI'yi oluştur"""
+        # UI'yi oluştur
         central_widget = QWidget()
         self.central_widget = central_widget
         self.setCentralWidget(central_widget)
@@ -558,7 +602,8 @@ class GameWindow(QMainWindow):
         self.connection_error_label.setStyleSheet("color: white")
         self.connection_error_label.setFont(QFont("Arial", 22, QFont.Bold))
         self.connection_error_label.setAlignment(Qt.AlignCenter)
-        self.connection_error_label.setWordWrap(True)
+        self.connection_error_label.setWordWrap(False)
+        self.connection_error_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         connection_layout.addWidget(self.connection_error_label)
 
         self.connection_retry_btn = QPushButton("Tamam")
@@ -586,7 +631,7 @@ class GameWindow(QMainWindow):
         self.connection_overlay.setLayout(connection_layout)
     
     def show_connection_dialog(self):
-        """Bağlantı diyalogunu göster"""
+        # Bağlantı diyalogunu göster
         dialog = ConnectionDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             ip, port = dialog.get_connection_details()
@@ -596,7 +641,7 @@ class GameWindow(QMainWindow):
             self.close()
 
     def update_player_legend(self, total_players: int):
-        """Oyuncu renk göstergesini güncelle"""
+        # Oyuncu renk göstergesini güncelle
         if total_players <= 0:
             self.player_legend_label.setText("Oyuncular: -")
             return
@@ -611,7 +656,7 @@ class GameWindow(QMainWindow):
         self.player_legend_label.setText("   ".join(parts))
 
     def update_player_label_color(self, player_id: Optional[int]):
-        """Oyuncu etiketinin rengini oyuncu rengine ayarla"""
+        # Oyuncu etiketinin rengini oyuncu rengine ayarla
         if not player_id:
             self.player_label.setStyleSheet("")
             return
@@ -623,7 +668,7 @@ class GameWindow(QMainWindow):
         )
 
     def resizeEvent(self, event):
-        """Ensure overlay covers the central widget on resize"""
+        # Ensure overlay covers the central widget on resize
         super().resizeEvent(event)
         try:
             if hasattr(self, 'winner_overlay') and self.winner_overlay is not None:
@@ -634,18 +679,18 @@ class GameWindow(QMainWindow):
             pass
     
     def on_connection_established(self):
-        """Bağlantı kuruldu"""
+        # Bağlantı kuruldu
         self.game_phase = GamePhase.IN_GAME
         self.status_label.setText("Oyuna katıldınız. Oynuncu numarası bekleniyor...")
         self.message_label.setText("Sunucuya bağlandı.")
         self.players_count_label.setText("Oyuncu sayısı: 1")
     
     def on_connection_failed(self, error: str):
-        """Bağlantı başarısız"""
+        # Bağlantı başarısız
         self.show_connection_error(error, reopen_dialog=True)
     
     def on_disconnected(self, message: str):
-        """Bağlantı kesildi"""
+        # Bağlantı kesildi
         self.game_phase = GamePhase.CONNECTING
         if self.reconnect_after_disconnect:
             self.reconnect_after_disconnect = False
@@ -653,22 +698,22 @@ class GameWindow(QMainWindow):
         self.show_connection_error(message, reopen_dialog=True)
 
     def show_connection_error(self, message: str, reopen_dialog: bool = False):
-        """Bağlantı hatasını tam ekran katmanla göster"""
+        # Bağlantı hatasını tam ekran katmanla göster
         self.reconnect_after_disconnect = reopen_dialog
         self.roll_dice_btn.setEnabled(False)
         self.reset_btn.setEnabled(False)
-        self.connection_error_label.setText(f"{message}\n\nServer ve IP seçim ekranına yönlendiriliyorsunuz.")
+        self.connection_error_label.setText(message)
         self.connection_overlay.setGeometry(self.central_widget.rect())
         self.connection_overlay.show()
         self.connection_overlay.raise_()
 
     def on_connection_error_acknowledged(self):
-        """Bağlantı hatası onaylandığında yeniden bağlanma ekranını aç"""
+        # Bağlantı hatası onaylandığında yeniden bağlanma ekranını aç
         self.connection_overlay.hide()
         QTimer.singleShot(0, self.show_connection_dialog)
     
     def on_message_received(self, message: Dict):
-        """Sunucudan mesaj alındı"""
+        # Sunucudan mesaj alındı
         msg_type = message.get("type")
         
         if msg_type == "player_assigned":
@@ -692,7 +737,7 @@ class GameWindow(QMainWindow):
         
         elif msg_type == "connection_rejected":
             error_msg = message.get("message", "Bağlantı reddedildi")
-            self.status_label.setText(f"Bağlantı reddedildi: {error_msg}")
+            self.status_label.setText(error_msg)
             self.roll_dice_btn.setEnabled(False)
             self.reset_btn.setEnabled(False)
             self.show_connection_error(error_msg, reopen_dialog=True)
@@ -758,7 +803,7 @@ class GameWindow(QMainWindow):
             self.game_phase = GamePhase.IN_GAME
     
     def update_board(self, board_state: Dict):
-        """Tahtayı güncelle"""
+        # Tahtayı güncelle
         player_positions = board_state.get("player_positions", {})
         if not player_positions:
             player_positions = {}
@@ -771,12 +816,12 @@ class GameWindow(QMainWindow):
         self.game_board.update_positions(player_positions, current)
     
     def roll_dice(self):
-        """Zar at"""
+        # Zar at
         if not self.client.send_message({"type": "roll_dice"}):
             QMessageBox.critical(self, "Hata", "Sunucuya bağlı değilsiniz")
     
     def reset_game(self):
-        """Oyunu sıfırla"""
+        # Oyunu sıfırla
         reply = QMessageBox.question(
             self,
             "Oyunu Sıfırla",
@@ -789,7 +834,7 @@ class GameWindow(QMainWindow):
                 QMessageBox.critical(self, "Hata", "Sunucuya bağlı değilsiniz")
     
     def game_finished(self, winner: int):
-        """Oyun bitti"""
+        # Oyun bitti
         if self.game_phase == GamePhase.FINISHED and self.last_winner_id == winner and self.winner_overlay.isVisible():
             return
         self.game_phase = GamePhase.FINISHED
@@ -812,18 +857,18 @@ class GameWindow(QMainWindow):
 
         # Show full-window winner overlay
         if winner == self.player_id:
-            self.status_label.setText("🎉 Tebrikler! Kazandınız!")
-            self.winner_label.setText("Tebrikler! Kazandınız 🎉")
+            self.status_label.setText("Tebrikler! Kazandınız!")
+            self.winner_label.setText("Tebrikler! Kazandınız")
         else:
             self.status_label.setText(f"Oyun bitti. Oyuncu {winner} kazandı.")
-            self.winner_label.setText(f"Kaybettiniz.\nOyuncu {winner} Kazandı 🎉")
+            self.winner_label.setText(f"Kaybettiniz.\nOyuncu {winner} Kazandı")
 
         self.message_label.setText("Devam'a basın. Tüm oyuncular basınca oyun sıfırlanır.")
         self.winner_overlay.setGeometry(self.central_widget.rect())
         self.winner_overlay.show()
 
     def on_winner_continue(self):
-        """Kullanıcı 'Devam' butonuna bastığında overlay'i kapat; oyun sıfırlanmadan zar atılmasın"""
+        # Kullanıcı 'Devam' butonuna bastığında overlay'i kapat; oyun sıfırlanmadan zar atılmasın
         self.winner_overlay.hide()
         self.winner_continue_btn.setEnabled(False)
         # Tüm oyuncular 'Devam' basınca sunucudan sıfırlama iste
@@ -834,13 +879,13 @@ class GameWindow(QMainWindow):
             pass
     
     def closeEvent(self, event):
-        """Pencere kapatılırken"""
+        # Pencere kapatılırken
         self.client.disconnect()
         event.accept()
 
 
 def main():
-    """Ana fonksiyon"""
+    # Ana fonksiyon
     app = QApplication(sys.argv)
     window = GameWindow()
     QTimer.singleShot(0, window.show_connection_dialog)

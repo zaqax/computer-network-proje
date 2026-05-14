@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Snakes and Ladders Game - Server Application
-AWS üzerinde çalışacak oyun sunucusu
-"""
-
 import socket
 import json
 import threading
@@ -22,14 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class GameState(Enum):
-    """Oyun durumları"""
+    # Oyun durumları
     WAITING_FOR_PLAYERS = "waiting"
     IN_PROGRESS = "in_progress"
     FINISHED = "finished"
 
 
 class SnakesAndLaddersGame:
-    """Snakes and Ladders oyunu mantığı"""
+    # Snakes and Ladders oyunu mantığı
     
     BOARD_SIZE = 100
     
@@ -65,7 +58,7 @@ class SnakesAndLaddersGame:
     }
     
     def __init__(self, max_players: int = 5):
-        """Oyunu başlat"""
+        # Oyunu başlat
         self.max_players = max_players
         self.player_positions = {}  # Oyuncu ID'si: pozisyon
         self.current_player = 1
@@ -73,15 +66,15 @@ class SnakesAndLaddersGame:
         self.winner = None
         
     def is_valid_move(self, player_id: int) -> bool:
-        """Oyuncu geçerli mi kontrol et"""
+        # Oyuncu geçerli mi kontrol et
         return player_id in self.player_positions
     
     def roll_dice(self) -> int:
-        """Zar at (1-6)"""
+        # Zar at (1-6)
         return random.randint(1, 6)
     
     def move_player(self, player_id: int, dice_value: int) -> Dict:
-        """Oyuncuyu taşı"""
+        # Oyuncuyu taşı
         if not self.is_valid_move(player_id):
             return {"success": False, "error": "Geçersiz oyuncu ID"}
         
@@ -127,13 +120,13 @@ class SnakesAndLaddersGame:
         }
     
     def switch_player(self):
-        """Oyuncuyu değiştir"""
+        # Oyuncuyu değiştir
         player_ids = sorted(self.player_positions.keys())
         current_index = player_ids.index(self.current_player)
         self.current_player = player_ids[(current_index + 1) % len(player_ids)]
 
     def remove_player(self, player_id: int) -> Optional[int]:
-        """Oyuncuyu oyundan kaldır ve geçerli sıra oyuncusunu geri döndür"""
+        # Oyuncuyu oyundan kaldır ve geçerli sıra oyuncusunu geri döndür
         if player_id not in self.player_positions:
             return self.current_player if self.current_player in self.player_positions else None
 
@@ -160,7 +153,7 @@ class SnakesAndLaddersGame:
         return self.current_player
     
     def get_board_state(self) -> Dict:
-        """Tahta durumunu döndür"""
+        # Tahta durumunu döndür
         board_state = {
             "current_player": self.current_player,
             "game_state": self.game_state.value,
@@ -176,7 +169,7 @@ class SnakesAndLaddersGame:
         return board_state
     
     def reset_game(self):
-        """Oyunu sıfırla"""
+        # Oyunu sıfırla
         for player_id in self.player_positions.keys():
             self.player_positions[player_id] = 0
         self.current_player = 1
@@ -185,10 +178,10 @@ class SnakesAndLaddersGame:
 
 
 class GameServer:
-    """Oyun sunucusu"""
+    # Oyun sunucusu
     
     def __init__(self, host: str = '0.0.0.0', port: int = 5000, max_players: int = 5):
-        """Sunucuyu başlat"""
+        # Sunucuyu başlat
         self.host = host
         self.port = port
         self.max_players = max_players
@@ -202,7 +195,7 @@ class GameServer:
         self.reset_expected = 0
 
     def get_next_player_id(self) -> int:
-        """Boşta olan en küçük oyuncu ID'sini bul"""
+        # Boşta olan en küçük oyuncu ID'sini bul
         used_ids = set(self.game.player_positions.keys())
         for player_id in range(1, self.max_players + 1):
             if player_id not in used_ids:
@@ -210,7 +203,7 @@ class GameServer:
         return self.max_players + 1
         
     def start(self):
-        """Sunucuyu çalıştır"""
+        # Sunucuyu çalıştır
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -238,7 +231,7 @@ class GameServer:
             self.shutdown()
     
     def accept_connections(self):
-        """İstemci bağlantılarını kabul et"""
+        # İstemci bağlantılarını kabul et
         while True:
             try:
                 # accept() yeni bir TCP bağlantısı bekler.
@@ -247,6 +240,7 @@ class GameServer:
                 
                 with self.lock:
                     # Oyun devam ediyorsa bağlantıyı reddet
+                    # Oyun basladiysa yeni oyuncu alinmaz.
                     if self.game.game_state == GameState.IN_PROGRESS:
                         error_msg = "Oyun devam ediyor"
                         self.send_message(client_socket, {
@@ -258,6 +252,7 @@ class GameServer:
                         continue
                     
                     # Maksimum oyuncu sayısına ulaştıysa bağlantıyı reddet
+                    # Oda doluysa yeni baglanti reddedilir.
                     if len(self.clients) >= self.max_players:
                         error_msg = "Oyun dolu"
                         self.send_message(client_socket, {
@@ -304,7 +299,7 @@ class GameServer:
                 logger.error(f"Bağlantı kabul hatası: {e}")
     
     def start_game(self):
-        """Oyunu başlat (en az 2 oyuncu bağlandığında)"""
+        # Oyunu başlat (en az 2 oyuncu bağlandığında)
         with self.lock:
             if self.game.game_state == GameState.WAITING_FOR_PLAYERS and len(self.clients) >= 2:
                 logger.info(f"Oyun başlıyor ({len(self.clients)} oyuncu)...")
@@ -316,7 +311,7 @@ class GameServer:
                 })
     
     def handle_client(self, client_socket: socket.socket):
-        """İstemciyi yönet"""
+        # İstemciyi yönet
         player_id = self.clients.get(client_socket)
         if not player_id:
             return
@@ -371,7 +366,7 @@ class GameServer:
             self.disconnect_client(client_socket, player_id)
     
     def process_message(self, message: Dict, player_id: int) -> Optional[Dict]:
-        """İstemciden gelen mesajı işle"""
+        # İstemciden gelen mesajı işle
         try:
             msg_type = message.get("type")
 
@@ -466,7 +461,7 @@ class GameServer:
             return {"type": "error", "message": str(e)}
     
     def send_message(self, client_socket: socket.socket, message: Dict):
-        """İstemciye JSON mesaj gönder"""
+        # İstemciye JSON mesaj gönder
         try:
             # TCP stream üzerinde \n ile mesaj sınırı koyuyoruz.
             json_message = json.dumps(message, ensure_ascii=False)
@@ -481,7 +476,7 @@ class GameServer:
             raise
     
     def receive_message(self, client_socket: socket.socket) -> Optional[Dict]:
-        """İstemciden JSON mesaj al"""
+        # İstemciden JSON mesaj al
         try:
             buffer = self.client_buffers.get(client_socket, b"")
             while b"\n" not in buffer:
@@ -510,7 +505,7 @@ class GameServer:
             return None
     
     def broadcast(self, message: Dict):
-        """Tüm istemcilere mesaj gönder"""
+        # Tüm istemcilere mesaj gönder
         # Sunucudan tüm clientlara aynı mesajı yolluyoruz.
         for client_socket in list(self.clients.keys()):
             try:
@@ -519,7 +514,7 @@ class GameServer:
                 logger.error(f"Broadcast hatası: {e}")
     
     def disconnect_client(self, client_socket: socket.socket, player_id: int):
-        """İstemciyi bağlantısını kes"""
+        # İstemciyi bağlantısını kes
         try:
             next_player = None
             was_in_progress = self.game.game_state == GameState.IN_PROGRESS
@@ -588,7 +583,7 @@ class GameServer:
             logger.error(f"Bağlantı kesme hatası: {e}")
     
     def shutdown(self):
-        """Sunucuyu kapat"""
+        # Sunucuyu kapat
         if self.server_socket:
             self.server_socket.close()
         logger.info("Sunucu kapatıldı")
