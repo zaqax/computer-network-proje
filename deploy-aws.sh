@@ -1,6 +1,4 @@
-#!/bin/bash
-# Snakes and Ladders Game - AWS EC2 Dağıtım Scripti
-# Ubuntu 22.04 LTS için
+
 
 echo "========================================="
 echo "Snakes & Ladders - AWS EC2 Kurulumu"
